@@ -1,344 +1,371 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Volume2, CheckCircle, XCircle, ArrowRight, RefreshCcw, Star } from 'lucide-react';
-
-const App = () => {
-  // Dữ liệu từ vựng và câu
-  const VOCABULARY = [
-    { word: 'Happy', image: 'https://images.unsplash.com/photo-1513151233558-d860c5398176?q=80&w=500', emoji: '😊' },
-    { word: 'Sleepy', image: 'https://images.unsplash.com/photo-1511017049443-10005842d42f?q=80&w=500', emoji: '😴' },
-    { word: 'Sad', image: 'https://images.unsplash.com/photo-1516585427167-9f4af9627e6c?q=80&w=500', emoji: '😢' },
-    { word: 'Angry', image: 'https://images.unsplash.com/photo-1594499468121-f45e83e30df4?q=80&w=500', emoji: '😠' },
-    { word: 'Fine', image: 'https://images.unsplash.com/photo-1522075469751-3a6694fb2f61?q=80&w=500', emoji: '👌' },
-    { word: 'Sick', image: 'https://images.unsplash.com/photo-1584622650111-993a426fbf0a?q=80&w=500', emoji: '🤒' },
-    { word: 'Scared', image: 'https://images.unsplash.com/photo-1509248961158-e54f6934749c?q=80&w=500', emoji: '😨' }
-  ];
-
-  const SENTENCES = [
-    { text: 'How are you today?', image: 'https://images.unsplash.com/photo-1521791136064-7986c2923216?q=80&w=500', emoji: '👋' },
-    { text: "I'm fine", image: 'https://images.unsplash.com/photo-1499952126235-59a0993d53b6?q=80&w=500', emoji: '🙂' },
-    { text: "What is your teacher's name?", image: 'https://images.unsplash.com/photo-1524178232363-1fb2b075b655?q=80&w=500', emoji: '👩‍🏫' },
-    { text: "My teacher's name is Mr. Hung", image: 'https://images.unsplash.com/photo-1544717297-fa95b3ee51f3?q=80&w=500', emoji: '👨‍🏫' },
-    { text: "What is your best friend's name?", image: 'https://images.unsplash.com/photo-1529156069898-49953e39b3ac?q=80&w=500', emoji: '👯' },
-    { text: "My best friend's name is Maria.", image: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?q=80&w=500', emoji: '👧' }
-  ];
-
-  const PRAISE_LIST = ["Well done", "Good job", "Excellent", "Very good"];
-
-  // Trạng thái ứng dụng
-  const [questions, setQuestions] = useState([]);
-  const [currentIndex, setCurrentIndex] = useState(0);
-  const [userInput, setUserInput] = useState([]);
-  const [scrambledItems, setScrambledItems] = useState([]);
-  const [attempts, setAttempts] = useState(0);
-  const [showResult, setShowResult] = useState(null); // 'correct', 'wrong', 'revealed'
-  const [praise, setPraise] = useState('');
-  const [imageError, setImageError] = useState(false);
-  const [isFinished, setIsFinished] = useState(false);
-
-  // Xử lý TTS (Text-to-Speech)
-  const speak = useCallback((text) => {
-    if (!window.speechSynthesis) return;
-    window.speechSynthesis.cancel();
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = 'en-US';
-    utterance.rate = 0.8; // Đọc chậm
-    utterance.pitch = 1.1; // Giọng nữ cao hơn một chút
-    window.speechSynthesis.speak(utterance);
-  }, []);
-
-  // Trộn mảng
-  const shuffleArray = (array) => [...array].sort(() => Math.random() - 0.5);
-
-  // Khởi tạo trò chơi
-  const initGame = useCallback(() => {
-    const q1 = VOCABULARY.map(item => ({ ...item, type: 'word', answer: item.word }));
-    const q2 = SENTENCES.map(item => ({ ...item, type: 'sentence', answer: item.text }));
-    const allQuestions = shuffleArray([...q1, ...q2]);
-    
-    setQuestions(allQuestions);
-    setCurrentIndex(0);
-    setIsFinished(false);
-    loadQuestion(allQuestions[0]);
-  }, []);
-
-  const loadQuestion = (question) => {
-    setImageError(false);
-    setShowResult(null);
-    setAttempts(0);
-    
-    let items = [];
-    if (question.type === 'word') {
-      // Sắp xếp ký tự
-      items = shuffleArray(question.answer.split(''));
-      setUserInput(new Array(question.answer.length).fill(''));
-    } else {
-      // Sắp xếp từ
-      items = shuffleArray(question.answer.split(' '));
-      setUserInput(new Array(question.answer.split(' ').length).fill(''));
-    }
-    
-    setScrambledItems(items);
-    speak(question.answer);
-  };
-
-  useEffect(() => {
-    initGame();
-  }, [initGame]);
-
-  // Xử lý phím Enter
-  useEffect(() => {
-    const handleKeyDown = (e) => {
-      if (e.key === 'Enter' && !showResult && !isFinished) {
-        checkAnswer();
-      } else if (e.key === 'Enter' && showResult === 'correct') {
-        nextQuestion();
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [userInput, showResult, isFinished]);
-
-  const checkAnswer = () => {
-    if (showResult === 'correct' || showResult === 'revealed') return;
-
-    const currentQ = questions[currentIndex];
-    const currentInput = userInput.join(currentQ.type === 'word' ? '' : ' ').trim().toLowerCase();
-    const correctAnswer = currentQ.answer.toLowerCase();
-
-    if (currentInput === correctAnswer) {
-      setShowResult('correct');
-      const randomPraise = PRAISE_LIST[Math.floor(Math.random() * PRAISE_LIST.length)];
-      setPraise(randomPraise);
-      speak(randomPraise);
-      // Play success sound (browser beep as fallback)
-      playAudioFeedback(true);
-    } else {
-      const newAttempts = attempts + 1;
-      setAttempts(newAttempts);
-      
-      if (newAttempts >= 3) {
-        setShowResult('revealed');
-        // Điền đáp án đúng vào ô trống
-        if (currentQ.type === 'word') {
-          setUserInput(currentQ.answer.split(''));
-        } else {
-          setUserInput(currentQ.answer.split(' '));
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Học Tiếng Anh Thật Vui</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Lexend:wght@400;600;800&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Lexend', sans-serif;
+            background-color: #f0f9ff;
+            touch-action: manipulation;
         }
-      } else {
-        setShowResult('wrong');
-        playAudioFeedback(false);
-        setTimeout(() => setShowResult(null), 1000);
-      }
-    }
-  };
+        .shake {
+            animation: shake 0.5s cubic-bezier(.36,.07,.19,.97) both;
+        }
+        @keyframes shake {
+            10%, 90% { transform: translate3d(-1px, 0, 0); }
+            20%, 80% { transform: translate3d(2px, 0, 0); }
+            30%, 50%, 70% { transform: translate3d(-4px, 0, 0); }
+            40%, 60% { transform: translate3d(4px, 0, 0); }
+        }
+        .confetti {
+            animation: bounce 0.6s infinite alternate;
+        }
+        @keyframes bounce {
+            from { transform: translateY(0); }
+            to { transform: translateY(-10px); }
+        }
+        .image-container img {
+            max-width: 100%;
+            max-height: 250px;
+            object-fit: contain;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col items-center p-4">
 
-  const playAudioFeedback = (isSuccess) => {
-    const ctx = new (window.AudioContext || window.webkitAudioContext)();
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-    
-    if (isSuccess) {
-      osc.frequency.setValueAtTime(523.25, ctx.currentTime); // C5
-      osc.frequency.exponentialRampToValueAtTime(1046.50, ctx.currentTime + 0.3); // C6
-      gain.gain.setValueAtTime(0.1, ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3);
-    } else {
-      osc.frequency.setValueAtTime(200, ctx.currentTime);
-      osc.frequency.linearRampToValueAtTime(100, ctx.currentTime + 0.3);
-      gain.gain.setValueAtTime(0.1, ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3);
-    }
-    
-    osc.start();
-    osc.stop(ctx.currentTime + 0.3);
-  };
-
-  const nextQuestion = () => {
-    if (currentIndex < questions.length - 1) {
-      const nextIdx = currentIndex + 1;
-      setCurrentIndex(nextIdx);
-      loadQuestion(questions[nextIdx]);
-    } else {
-      setIsFinished(true);
-    }
-  };
-
-  const handleTileClick = (val, index) => {
-    if (showResult === 'correct' || showResult === 'revealed') return;
-    
-    const firstEmpty = userInput.findIndex(item => item === '');
-    if (firstEmpty !== -1) {
-      const newUserInput = [...userInput];
-      newUserInput[firstEmpty] = val;
-      setUserInput(newUserInput);
-      
-      // Xóa item đã chọn khỏi danh sách trộn
-      const newScrambled = [...scrambledItems];
-      newScrambled.splice(index, 1);
-      setScrambledItems(newScrambled);
-    }
-  };
-
-  const undoInput = (index) => {
-    if (showResult === 'correct' || showResult === 'revealed') return;
-    if (userInput[index] === '') return;
-
-    const val = userInput[index];
-    const newUserInput = [...userInput];
-    newUserInput[index] = '';
-    setUserInput(newUserInput);
-    setScrambledItems([...scrambledItems, val]);
-  };
-
-  const currentQ = questions[currentIndex];
-
-  if (isFinished) {
-    return (
-      <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-4">
-        <div className="bg-white rounded-3xl shadow-xl p-8 max-w-md w-full text-center space-y-6">
-          <div className="inline-flex items-center justify-center w-20 h-20 bg-yellow-100 rounded-full">
-            <Star className="w-12 h-12 text-yellow-500 fill-current" />
-          </div>
-          <h1 className="text-3xl font-bold text-slate-800">Hoàn thành bài tập!</h1>
-          <p className="text-slate-600">Bạn đã hoàn thành tất cả các câu hỏi một cách xuất sắc.</p>
-          <button 
-            onClick={initGame}
-            className="w-full py-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl font-bold text-xl transition-all shadow-lg flex items-center justify-center gap-2"
-          >
-            <RefreshCcw className="w-6 h-6" /> Làm lại từ đầu
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  if (!currentQ) return <div className="flex items-center justify-center h-screen">Loading...</div>;
-
-  return (
-    <div className="min-h-screen bg-slate-50 flex flex-col items-center p-4 md:p-8 font-sans text-slate-900">
-      {/* Header */}
-      <div className="w-full max-w-2xl flex justify-between items-center mb-6">
-        <div className="text-sm font-semibold bg-white px-4 py-2 rounded-full shadow-sm border border-slate-200">
-          Câu hỏi: <span className="text-indigo-600">{currentIndex + 1} / {questions.length}</span>
-        </div>
-        <button 
-          onClick={() => speak(currentQ.answer)}
-          className="p-3 bg-white hover:bg-slate-50 text-indigo-600 rounded-full shadow-sm border border-slate-200 transition-colors"
-          title="Nghe lại"
-        >
-          <Volume2 className="w-6 h-6" />
-        </button>
-      </div>
-
-      {/* Main Content Card */}
-      <div className="w-full max-w-2xl bg-white rounded-[2rem] shadow-2xl shadow-indigo-100/50 overflow-hidden flex flex-col">
-        {/* Image Section */}
-        <div className="relative w-full aspect-video bg-slate-200 flex items-center justify-center">
-          {!imageError ? (
-            <img 
-              src={currentQ.image} 
-              alt="Exercise" 
-              className="w-full h-full object-contain"
-              onError={() => setImageError(true)}
-            />
-          ) : (
-            <div className="text-8xl select-none" role="img" aria-label="emoji placeholder">
-              {currentQ.emoji}
-            </div>
-          )}
-          
-          {/* Overlay Result */}
-          {showResult === 'correct' && (
-            <div className="absolute inset-0 bg-green-500/80 flex flex-col items-center justify-center text-white animate-in fade-in zoom-in duration-300">
-              <CheckCircle className="w-20 h-20 mb-2" />
-              <h2 className="text-4xl font-black uppercase tracking-widest">{praise}!</h2>
-            </div>
-          )}
-        </div>
-
-        {/* Workspace */}
-        <div className="p-6 md:p-10 space-y-8 flex-grow">
-          {/* Input Area (Drop targets) */}
-          <div className="flex flex-wrap justify-center gap-2 md:gap-3">
-            {userInput.map((val, idx) => (
-              <div 
-                key={`slot-${idx}`}
-                onClick={() => undoInput(idx)}
-                className={`
-                  ${currentQ.type === 'word' ? 'w-10 h-12 md:w-12 md:h-14 text-2xl' : 'px-4 py-2 min-w-[60px] h-12 md:h-14 text-lg'}
-                  flex items-center justify-center rounded-xl border-2 transition-all cursor-pointer
-                  ${val ? 'border-indigo-500 bg-indigo-50 text-indigo-700 shadow-sm' : 'border-dashed border-slate-300 bg-slate-50'}
-                  ${showResult === 'revealed' ? 'border-amber-500 text-amber-700 bg-amber-50' : ''}
-                `}
-              >
-                {val}
-              </div>
-            ))}
-          </div>
-
-          {/* Scrambled Items Area (Selection) */}
-          <div className="flex flex-wrap justify-center gap-2 md:gap-3 pt-4 border-t border-slate-100">
-            {scrambledItems.map((val, idx) => (
-              <button
-                key={`tile-${idx}`}
-                onClick={() => handleTileClick(val, idx)}
-                disabled={showResult === 'correct' || showResult === 'revealed'}
-                className={`
-                  ${currentQ.type === 'word' ? 'w-10 h-12 md:w-12 md:h-14 text-2xl' : 'px-4 py-2 min-w-[60px] h-12 md:h-14 text-lg'}
-                  flex items-center justify-center bg-white border-2 border-slate-200 rounded-xl shadow-sm
-                  hover:border-indigo-400 hover:-translate-y-1 transition-all active:scale-95
-                  disabled:opacity-50 disabled:cursor-not-allowed font-medium
-                `}
-              >
-                {val}
-              </button>
-            ))}
-          </div>
-
-          {/* Feedback Message */}
-          {showResult === 'wrong' && (
-            <div className="flex items-center justify-center gap-2 text-rose-500 font-bold animate-bounce">
-              <XCircle className="w-5 h-5" /> Thử lại nhé! ({attempts}/3)
-            </div>
-          )}
-
-          {showResult === 'revealed' && (
-            <div className="bg-amber-50 p-4 rounded-2xl border border-amber-200 text-amber-800 text-center animate-in slide-in-from-bottom-2">
-              <p className="font-semibold mb-1">Hãy xem đáp án:</p>
-              <p className="text-xl font-bold">{currentQ.answer}</p>
-            </div>
-          )}
-        </div>
-
-        {/* Footer Actions */}
-        <div className="p-6 bg-slate-50 border-t border-slate-100">
-          {!showResult || showResult === 'wrong' ? (
-            <button 
-              onClick={checkAnswer}
-              className="w-full py-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl font-bold text-xl transition-all shadow-lg active:scale-[0.98]"
-            >
-              KIỂM TRA (Enter)
+    <div id="app" class="w-full max-w-2xl bg-white rounded-3xl shadow-xl overflow-hidden p-6 md:p-8">
+        <!-- Màn hình bắt đầu -->
+        <div id="start-screen" class="text-center py-10">
+            <h1 class="text-4xl font-extrabold text-blue-600 mb-6">Học Tiếng Anh Thật Vui! 🌟</h1>
+            <p class="text-gray-600 mb-8">Sắp xếp các chữ cái và từ ngữ để hoàn thành bài tập nhé.</p>
+            <button onclick="startGame()" class="bg-green-500 hover:bg-green-600 text-white text-2xl font-bold py-4 px-10 rounded-full transition-all transform hover:scale-105 shadow-lg">
+                BẮT ĐẦU
             </button>
-          ) : (
-            <button 
-              onClick={nextQuestion}
-              className="w-full py-4 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl font-bold text-xl transition-all shadow-lg flex items-center justify-center gap-3 active:scale-[0.98]"
-            >
-              CÂU TIẾP THEO <ArrowRight className="w-6 h-6" />
-            </button>
-          )}
         </div>
-      </div>
 
-      {/* Instructions */}
-      <p className="mt-8 text-slate-400 text-sm text-center max-w-sm">
-        Nhấn vào các ô để sắp xếp từ. <br />
-        Trên máy tính: Nhấn <b>Enter</b> để kiểm tra nhanh.
-      </p>
+        <!-- Màn hình chơi game -->
+        <div id="game-container" class="hidden">
+            <div class="flex justify-between items-center mb-6">
+                <div class="text-blue-500 font-bold">Câu hỏi: <span id="current-index">1</span>/<span id="total-questions">0</span></div>
+                <div class="flex gap-4">
+                    <span class="text-green-500 font-bold">✅ <span id="correct-count">0</span></span>
+                    <span class="text-red-500 font-bold">❌ <span id="wrong-count">0</span></span>
+                </div>
+            </div>
+
+            <div class="w-full bg-gray-200 rounded-full h-3 mb-8">
+                <div id="progress-bar" class="bg-blue-500 h-3 rounded-full transition-all duration-500" style="width: 0%"></div>
+            </div>
+
+            <div class="flex flex-col items-center mb-6">
+                <div class="image-container bg-gray-50 rounded-2xl border-4 border-blue-100 p-2 w-full flex justify-center items-center overflow-hidden min-h-[200px]">
+                    <img id="question-image" src="" alt="Câu hỏi" onerror="handleImageError(this)">
+                    <div id="emoji-fallback" class="hidden text-8xl"></div>
+                </div>
+                <button onclick="speakCurrentQuestion()" class="mt-4 flex items-center gap-2 bg-blue-100 text-blue-600 font-bold py-2 px-6 rounded-full hover:bg-blue-200 transition-colors">
+                    <span>🔊 Nghe lại</span>
+                </button>
+            </div>
+
+            <div id="interaction-area" class="text-center">
+                <!-- Đã xóa dòng hướng dẫn hủy bỏ -->
+                <div id="answer-slots" class="flex flex-wrap justify-center gap-2 mb-8"></div>
+                
+                <div id="scrambled-letters" class="flex flex-wrap justify-center gap-2 mb-6 min-h-[50px]"></div>
+                
+                <div id="feedback-msg" class="h-8 mb-4 font-bold transition-all duration-300"></div>
+
+                <div class="flex flex-col sm:flex-row justify-center gap-4">
+                    <button id="check-btn" onclick="checkAnswer()" class="bg-blue-600 hover:bg-blue-700 text-white font-extrabold py-3 px-10 rounded-2xl shadow-md transition-all disabled:opacity-50" disabled>
+                        KIỂM TRA (Enter)
+                    </button>
+                    <button id="next-btn" onclick="nextQuestion()" class="hidden bg-green-500 hover:bg-green-600 text-white font-extrabold py-3 px-10 rounded-2xl shadow-md transition-all">
+                        TIẾP THEO ➜
+                    </button>
+                </div>
+                
+                <div id="hint-area" class="mt-4 text-red-500 font-bold hidden italic text-lg"></div>
+            </div>
+        </div>
+
+        <!-- Màn hình kết quả -->
+        <div id="result-screen" class="hidden text-center py-10">
+            <h2 class="text-4xl font-extrabold text-blue-700 mb-6">XUẤT SẮC! 🎉</h2>
+            <div class="bg-blue-50 rounded-2xl p-8 mb-8">
+                <p class="text-2xl mb-4">Tổng cộng:</p>
+                <div class="flex justify-around text-3xl font-bold">
+                    <div class="text-green-600">Đúng: <span id="final-correct">0</span></div>
+                    <div class="text-red-600">Sai: <span id="final-wrong">0</span></div>
+                </div>
+            </div>
+            <button onclick="location.reload()" class="bg-blue-600 hover:bg-blue-700 text-white text-xl font-bold py-4 px-10 rounded-full transition-all">
+                LÀM LẠI
+            </button>
+        </div>
     </div>
-  );
-};
 
-export default App;
+    <script>
+        const QUESTIONS = [
+            { type: 'vocab', word: 'Happy', emoji: '😊' },
+            { type: 'vocab', word: 'Sleepy', emoji: '😴', img: 'https://images.unsplash.com/photo-1511195679361-26797825591b?q=80&w=600&auto=format' },
+            { type: 'vocab', word: 'Sad', emoji: '😢', img: 'https://images.unsplash.com/photo-1516589174184-c68526514b4c?q=80&w=600&auto=format' },
+            { type: 'vocab', word: 'Angry', emoji: '😡' },
+            { type: 'vocab', word: 'Fine', emoji: '👌' },	
+            { type: 'vocab', word: 'Sick', emoji: '🤒', img: 'https://thumbs.dreamstime.com/b/sad-cute-kid-girl-lay-bed-sick-177083061.jpg' },
+            { type: 'vocab', word: 'Scared', emoji: '😨', img: 'https://img.freepik.com/premium-vector/vector-illustration-cartoon-boy-with-scared-expression-pose_625612-23.jpg?semt=ais_rp_progressive&w=740&q=80' },
+            { type: 'sentence', text: 'How are you today?', emoji: '❓', img: 'https://voca-land.sgp1.cdn.digitaloceanspaces.com/43844/1759914955112/c55c6836.jpg' },
+            { type: 'sentence', text: 'I’m fine', emoji: '🙂' },
+            { type: 'sentence', text: 'What is your teacher’s name?', emoji: '👩‍🏫' },
+            { type: 'sentence', text: 'My teacher’s name is Mr. Hung', emoji: '👨‍🏫' },
+            { type: 'sentence', text: 'What is your best friend’s name?', emoji: '👫', img: 'https://img.freepik.com/free-vector/two-best-friend-girls-with-besties-lettering_1308-86711.jpg?semt=ais_hybrid&w=740&q=80' },
+            { type: 'sentence', text: 'My best friend’s name is Maria.', emoji: '👧', img: 'https://img.freepik.com/free-vector/two-best-friend-girls-with-besties-lettering_1308-86711.jpg?semt=ais_hybrid&w=740&q=80' }
+        ];
+
+        const PRAISES = ["Well done!", "Good job!", "Excellent!", "Very good!"];
+        let currentPool = [];
+        let currentIndex = 0;
+        let stats = { correct: 0, wrong: 0, attempts: 0 };
+        let currentAnswer = []; 
+
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        
+        function playBeep(type) {
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            if (type === 'correct') {
+                osc.type = 'sine'; osc.frequency.setValueAtTime(880, audioCtx.currentTime);
+                gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+                osc.start(); osc.stop(audioCtx.currentTime + 0.3);
+            } else if (type === 'wrong') {
+                osc.type = 'sawtooth'; osc.frequency.setValueAtTime(220, audioCtx.currentTime);
+                gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+                osc.start(); osc.stop(audioCtx.currentTime + 0.3);
+            }
+        }
+
+        function speak(text) {
+            const utterance = new SpeechSynthesisUtterance(text);
+            utterance.lang = 'en-US';
+            utterance.rate = 0.7;
+            utterance.pitch = 1.3;
+            window.speechSynthesis.speak(utterance);
+        }
+
+        function handleImageError(img) {
+            img.style.display = 'none';
+            const fallback = document.getElementById('emoji-fallback');
+            fallback.classList.remove('hidden');
+            fallback.innerText = QUESTIONS[currentPool[currentIndex]].emoji;
+        }
+
+        function shuffle(array) {
+            return array.sort(() => Math.random() - 0.5);
+        }
+
+        function startGame() {
+            document.getElementById('start-screen').classList.add('hidden');
+            document.getElementById('game-container').classList.remove('hidden');
+            currentPool = Array.from(QUESTIONS.keys());
+            shuffle(currentPool);
+            currentIndex = 0;
+            stats = { correct: 0, wrong: 0 };
+            updateStatsUI();
+            loadQuestion();
+        }
+
+        function loadQuestion() {
+            const q = QUESTIONS[currentPool[currentIndex]];
+            stats.attempts = 0;
+            currentAnswer = [];
+            
+            document.getElementById('current-index').innerText = currentIndex + 1;
+            document.getElementById('total-questions').innerText = currentPool.length;
+            document.getElementById('progress-bar').style.width = `${(currentIndex / currentPool.length) * 100}%`;
+            
+            document.getElementById('question-image').style.display = 'block';
+            document.getElementById('question-image').src = q.img;
+            document.getElementById('emoji-fallback').classList.add('hidden');
+            document.getElementById('feedback-msg').innerText = '';
+            document.getElementById('hint-area').classList.add('hidden');
+            document.getElementById('next-btn').classList.add('hidden');
+            document.getElementById('check-btn').classList.remove('hidden');
+            document.getElementById('check-btn').disabled = true;
+            
+            const scrambledArea = document.getElementById('scrambled-letters');
+            scrambledArea.innerHTML = '';
+
+            let items = q.type === 'vocab' ? q.word.split('') : q.text.replace(/[?.,]/g, '').split(' ');
+            const shuffledItems = shuffle(items.map((val, idx) => ({ val, id: idx })));
+            
+            shuffledItems.forEach((item) => {
+                const btn = document.createElement('button');
+                btn.innerText = item.val;
+                btn.id = `scramble-${item.id}`;
+                btn.className = "bg-white border-2 border-blue-400 hover:bg-blue-50 text-blue-700 font-bold px-4 py-2 rounded-xl transition-all shadow-sm active:scale-95 text-lg min-w-[45px]";
+                btn.onclick = () => addToAnswer(item.val, item.id);
+                scrambledArea.appendChild(btn);
+            });
+
+            renderSlots();
+            setTimeout(() => speakCurrentQuestion(), 500);
+        }
+
+        function renderSlots() {
+            const q = QUESTIONS[currentPool[currentIndex]];
+            const slotArea = document.getElementById('answer-slots');
+            slotArea.innerHTML = '';
+
+            const totalItems = q.type === 'vocab' ? q.word.length : q.text.replace(/[?.,]/g, '').split(' ').length;
+
+            for (let i = 0; i < totalItems; i++) {
+                const slot = document.createElement('div');
+                const isSentence = q.type === 'sentence';
+                slot.className = isSentence 
+                    ? "min-w-[60px] h-12 border-b-4 border-gray-300 flex items-center justify-center text-lg font-bold text-blue-600 px-2 cursor-pointer hover:bg-blue-50 transition-all"
+                    : "w-12 h-12 border-b-4 border-gray-300 flex items-center justify-center text-xl font-bold text-blue-600 uppercase cursor-pointer hover:bg-blue-50 transition-all";
+                
+                if (currentAnswer[i]) {
+                    slot.innerText = currentAnswer[i].val;
+                    slot.classList.replace('border-gray-300', 'border-blue-500');
+                    slot.onclick = () => removeFromAnswer(i);
+                }
+                
+                slotArea.appendChild(slot);
+            }
+
+            document.getElementById('check-btn').disabled = currentAnswer.length < totalItems;
+        }
+
+        function addToAnswer(val, originalId) {
+            const q = QUESTIONS[currentPool[currentIndex]];
+            const limit = q.type === 'vocab' ? q.word.length : q.text.replace(/[?.,]/g, '').split(' ').length;
+            
+            if (currentAnswer.length < limit) {
+                currentAnswer.push({ val, id: originalId });
+                document.getElementById(`scramble-${originalId}`).style.visibility = 'hidden';
+                renderSlots();
+            }
+        }
+
+        function removeFromAnswer(index) {
+            if (document.getElementById('check-btn').classList.contains('hidden')) return;
+
+            const item = currentAnswer.splice(index, 1)[0];
+            document.getElementById(`scramble-${item.id}`).style.visibility = 'visible';
+            renderSlots();
+        }
+
+        function resetCurrentAnswer() {
+            currentAnswer.forEach(item => {
+                const btn = document.getElementById(`scramble-${item.id}`);
+                if (btn) btn.style.visibility = 'visible';
+            });
+            currentAnswer = [];
+            renderSlots();
+        }
+
+        function checkAnswer() {
+            const q = QUESTIONS[currentPool[currentIndex]];
+            const target = q.type === 'vocab' ? q.word.toLowerCase() : q.text.replace(/[?.,]/g, '').toLowerCase();
+            const user = currentAnswer.map(i => i.val).join(q.type === 'vocab' ? '' : ' ').toLowerCase();
+
+            if (user === target) {
+                handleSuccess();
+            } else {
+                handleFailure();
+            }
+        }
+
+        function handleSuccess() {
+            stats.correct++;
+            updateStatsUI();
+            playBeep('correct');
+            
+            const praise = PRAISES[Math.floor(Math.random() * PRAISES.length)];
+            const feedback = document.getElementById('feedback-msg');
+            feedback.innerText = praise + " 🎉";
+            feedback.className = "h-8 mb-4 font-bold text-green-500 text-2xl confetti";
+            
+            document.getElementById('check-btn').classList.add('hidden');
+            document.getElementById('next-btn').classList.remove('hidden');
+            
+            document.querySelectorAll('#answer-slots > div').forEach(s => {
+                s.classList.add('text-green-600', 'border-green-500');
+                s.onclick = null;
+            });
+
+            speak(praise);
+        }
+
+        function handleFailure() {
+            stats.attempts++;
+            playBeep('wrong');
+            
+            const feedback = document.getElementById('feedback-msg');
+            feedback.innerText = "Sai rồi, thử lại nhé! ❌";
+            feedback.className = "h-8 mb-4 font-bold text-red-500 text-2xl shake";
+            
+            setTimeout(() => {
+                feedback.classList.remove('shake');
+                if (stats.attempts < 3) {
+                    resetCurrentAnswer();
+                }
+            }, 800);
+
+            if (stats.attempts >= 3) {
+                stats.wrong++;
+                updateStatsUI();
+                const hint = document.getElementById('hint-area');
+                hint.innerText = `Đáp án là: ${QUESTIONS[currentPool[currentIndex]].type === 'vocab' ? QUESTIONS[currentPool[currentIndex]].word : QUESTIONS[currentPool[currentIndex]].text}`;
+                hint.classList.remove('hidden');
+                document.getElementById('check-btn').classList.add('hidden');
+                document.getElementById('next-btn').classList.remove('hidden');
+            }
+        }
+
+        function updateStatsUI() {
+            document.getElementById('correct-count').innerText = stats.correct;
+            document.getElementById('wrong-count').innerText = stats.wrong;
+        }
+
+        function speakCurrentQuestion() {
+            const q = QUESTIONS[currentPool[currentIndex]];
+            speak(q.type === 'vocab' ? q.word : q.text);
+        }
+
+        function nextQuestion() {
+            currentIndex++;
+            if (currentIndex < currentPool.length) {
+                loadQuestion();
+            } else {
+                showResults();
+            }
+        }
+
+        function showResults() {
+            document.getElementById('game-container').classList.add('hidden');
+            document.getElementById('result-screen').classList.remove('hidden');
+            document.getElementById('final-correct').innerText = stats.correct;
+            document.getElementById('final-wrong').innerText = stats.wrong;
+            speak("Well done! You have finished the exercise.");
+        }
+
+        window.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                const nextBtn = document.getElementById('next-btn');
+                const checkBtn = document.getElementById('check-btn');
+                if (!nextBtn.classList.contains('hidden')) nextQuestion();
+                else if (!checkBtn.disabled && !checkBtn.classList.contains('hidden')) checkAnswer();
+            } else if (e.key === 'Backspace') {
+                if (currentAnswer.length > 0) removeFromAnswer(currentAnswer.length - 1);
+            }
+        });
+    </script>
+</body>
+</html>
