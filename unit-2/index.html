@@ -1,0 +1,344 @@
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { Volume2, CheckCircle, XCircle, ArrowRight, RefreshCcw, Star } from 'lucide-react';
+
+const App = () => {
+  // Dữ liệu từ vựng và câu
+  const VOCABULARY = [
+    { word: 'Happy', image: 'https://images.unsplash.com/photo-1513151233558-d860c5398176?q=80&w=500', emoji: '😊' },
+    { word: 'Sleepy', image: 'https://images.unsplash.com/photo-1511017049443-10005842d42f?q=80&w=500', emoji: '😴' },
+    { word: 'Sad', image: 'https://images.unsplash.com/photo-1516585427167-9f4af9627e6c?q=80&w=500', emoji: '😢' },
+    { word: 'Angry', image: 'https://images.unsplash.com/photo-1594499468121-f45e83e30df4?q=80&w=500', emoji: '😠' },
+    { word: 'Fine', image: 'https://images.unsplash.com/photo-1522075469751-3a6694fb2f61?q=80&w=500', emoji: '👌' },
+    { word: 'Sick', image: 'https://images.unsplash.com/photo-1584622650111-993a426fbf0a?q=80&w=500', emoji: '🤒' },
+    { word: 'Scared', image: 'https://images.unsplash.com/photo-1509248961158-e54f6934749c?q=80&w=500', emoji: '😨' }
+  ];
+
+  const SENTENCES = [
+    { text: 'How are you today?', image: 'https://images.unsplash.com/photo-1521791136064-7986c2923216?q=80&w=500', emoji: '👋' },
+    { text: "I'm fine", image: 'https://images.unsplash.com/photo-1499952126235-59a0993d53b6?q=80&w=500', emoji: '🙂' },
+    { text: "What is your teacher's name?", image: 'https://images.unsplash.com/photo-1524178232363-1fb2b075b655?q=80&w=500', emoji: '👩‍🏫' },
+    { text: "My teacher's name is Mr. Hung", image: 'https://images.unsplash.com/photo-1544717297-fa95b3ee51f3?q=80&w=500', emoji: '👨‍🏫' },
+    { text: "What is your best friend's name?", image: 'https://images.unsplash.com/photo-1529156069898-49953e39b3ac?q=80&w=500', emoji: '👯' },
+    { text: "My best friend's name is Maria.", image: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?q=80&w=500', emoji: '👧' }
+  ];
+
+  const PRAISE_LIST = ["Well done", "Good job", "Excellent", "Very good"];
+
+  // Trạng thái ứng dụng
+  const [questions, setQuestions] = useState([]);
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [userInput, setUserInput] = useState([]);
+  const [scrambledItems, setScrambledItems] = useState([]);
+  const [attempts, setAttempts] = useState(0);
+  const [showResult, setShowResult] = useState(null); // 'correct', 'wrong', 'revealed'
+  const [praise, setPraise] = useState('');
+  const [imageError, setImageError] = useState(false);
+  const [isFinished, setIsFinished] = useState(false);
+
+  // Xử lý TTS (Text-to-Speech)
+  const speak = useCallback((text) => {
+    if (!window.speechSynthesis) return;
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = 'en-US';
+    utterance.rate = 0.8; // Đọc chậm
+    utterance.pitch = 1.1; // Giọng nữ cao hơn một chút
+    window.speechSynthesis.speak(utterance);
+  }, []);
+
+  // Trộn mảng
+  const shuffleArray = (array) => [...array].sort(() => Math.random() - 0.5);
+
+  // Khởi tạo trò chơi
+  const initGame = useCallback(() => {
+    const q1 = VOCABULARY.map(item => ({ ...item, type: 'word', answer: item.word }));
+    const q2 = SENTENCES.map(item => ({ ...item, type: 'sentence', answer: item.text }));
+    const allQuestions = shuffleArray([...q1, ...q2]);
+    
+    setQuestions(allQuestions);
+    setCurrentIndex(0);
+    setIsFinished(false);
+    loadQuestion(allQuestions[0]);
+  }, []);
+
+  const loadQuestion = (question) => {
+    setImageError(false);
+    setShowResult(null);
+    setAttempts(0);
+    
+    let items = [];
+    if (question.type === 'word') {
+      // Sắp xếp ký tự
+      items = shuffleArray(question.answer.split(''));
+      setUserInput(new Array(question.answer.length).fill(''));
+    } else {
+      // Sắp xếp từ
+      items = shuffleArray(question.answer.split(' '));
+      setUserInput(new Array(question.answer.split(' ').length).fill(''));
+    }
+    
+    setScrambledItems(items);
+    speak(question.answer);
+  };
+
+  useEffect(() => {
+    initGame();
+  }, [initGame]);
+
+  // Xử lý phím Enter
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Enter' && !showResult && !isFinished) {
+        checkAnswer();
+      } else if (e.key === 'Enter' && showResult === 'correct') {
+        nextQuestion();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [userInput, showResult, isFinished]);
+
+  const checkAnswer = () => {
+    if (showResult === 'correct' || showResult === 'revealed') return;
+
+    const currentQ = questions[currentIndex];
+    const currentInput = userInput.join(currentQ.type === 'word' ? '' : ' ').trim().toLowerCase();
+    const correctAnswer = currentQ.answer.toLowerCase();
+
+    if (currentInput === correctAnswer) {
+      setShowResult('correct');
+      const randomPraise = PRAISE_LIST[Math.floor(Math.random() * PRAISE_LIST.length)];
+      setPraise(randomPraise);
+      speak(randomPraise);
+      // Play success sound (browser beep as fallback)
+      playAudioFeedback(true);
+    } else {
+      const newAttempts = attempts + 1;
+      setAttempts(newAttempts);
+      
+      if (newAttempts >= 3) {
+        setShowResult('revealed');
+        // Điền đáp án đúng vào ô trống
+        if (currentQ.type === 'word') {
+          setUserInput(currentQ.answer.split(''));
+        } else {
+          setUserInput(currentQ.answer.split(' '));
+        }
+      } else {
+        setShowResult('wrong');
+        playAudioFeedback(false);
+        setTimeout(() => setShowResult(null), 1000);
+      }
+    }
+  };
+
+  const playAudioFeedback = (isSuccess) => {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    
+    if (isSuccess) {
+      osc.frequency.setValueAtTime(523.25, ctx.currentTime); // C5
+      osc.frequency.exponentialRampToValueAtTime(1046.50, ctx.currentTime + 0.3); // C6
+      gain.gain.setValueAtTime(0.1, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3);
+    } else {
+      osc.frequency.setValueAtTime(200, ctx.currentTime);
+      osc.frequency.linearRampToValueAtTime(100, ctx.currentTime + 0.3);
+      gain.gain.setValueAtTime(0.1, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3);
+    }
+    
+    osc.start();
+    osc.stop(ctx.currentTime + 0.3);
+  };
+
+  const nextQuestion = () => {
+    if (currentIndex < questions.length - 1) {
+      const nextIdx = currentIndex + 1;
+      setCurrentIndex(nextIdx);
+      loadQuestion(questions[nextIdx]);
+    } else {
+      setIsFinished(true);
+    }
+  };
+
+  const handleTileClick = (val, index) => {
+    if (showResult === 'correct' || showResult === 'revealed') return;
+    
+    const firstEmpty = userInput.findIndex(item => item === '');
+    if (firstEmpty !== -1) {
+      const newUserInput = [...userInput];
+      newUserInput[firstEmpty] = val;
+      setUserInput(newUserInput);
+      
+      // Xóa item đã chọn khỏi danh sách trộn
+      const newScrambled = [...scrambledItems];
+      newScrambled.splice(index, 1);
+      setScrambledItems(newScrambled);
+    }
+  };
+
+  const undoInput = (index) => {
+    if (showResult === 'correct' || showResult === 'revealed') return;
+    if (userInput[index] === '') return;
+
+    const val = userInput[index];
+    const newUserInput = [...userInput];
+    newUserInput[index] = '';
+    setUserInput(newUserInput);
+    setScrambledItems([...scrambledItems, val]);
+  };
+
+  const currentQ = questions[currentIndex];
+
+  if (isFinished) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-4">
+        <div className="bg-white rounded-3xl shadow-xl p-8 max-w-md w-full text-center space-y-6">
+          <div className="inline-flex items-center justify-center w-20 h-20 bg-yellow-100 rounded-full">
+            <Star className="w-12 h-12 text-yellow-500 fill-current" />
+          </div>
+          <h1 className="text-3xl font-bold text-slate-800">Hoàn thành bài tập!</h1>
+          <p className="text-slate-600">Bạn đã hoàn thành tất cả các câu hỏi một cách xuất sắc.</p>
+          <button 
+            onClick={initGame}
+            className="w-full py-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl font-bold text-xl transition-all shadow-lg flex items-center justify-center gap-2"
+          >
+            <RefreshCcw className="w-6 h-6" /> Làm lại từ đầu
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (!currentQ) return <div className="flex items-center justify-center h-screen">Loading...</div>;
+
+  return (
+    <div className="min-h-screen bg-slate-50 flex flex-col items-center p-4 md:p-8 font-sans text-slate-900">
+      {/* Header */}
+      <div className="w-full max-w-2xl flex justify-between items-center mb-6">
+        <div className="text-sm font-semibold bg-white px-4 py-2 rounded-full shadow-sm border border-slate-200">
+          Câu hỏi: <span className="text-indigo-600">{currentIndex + 1} / {questions.length}</span>
+        </div>
+        <button 
+          onClick={() => speak(currentQ.answer)}
+          className="p-3 bg-white hover:bg-slate-50 text-indigo-600 rounded-full shadow-sm border border-slate-200 transition-colors"
+          title="Nghe lại"
+        >
+          <Volume2 className="w-6 h-6" />
+        </button>
+      </div>
+
+      {/* Main Content Card */}
+      <div className="w-full max-w-2xl bg-white rounded-[2rem] shadow-2xl shadow-indigo-100/50 overflow-hidden flex flex-col">
+        {/* Image Section */}
+        <div className="relative w-full aspect-video bg-slate-200 flex items-center justify-center">
+          {!imageError ? (
+            <img 
+              src={currentQ.image} 
+              alt="Exercise" 
+              className="w-full h-full object-contain"
+              onError={() => setImageError(true)}
+            />
+          ) : (
+            <div className="text-8xl select-none" role="img" aria-label="emoji placeholder">
+              {currentQ.emoji}
+            </div>
+          )}
+          
+          {/* Overlay Result */}
+          {showResult === 'correct' && (
+            <div className="absolute inset-0 bg-green-500/80 flex flex-col items-center justify-center text-white animate-in fade-in zoom-in duration-300">
+              <CheckCircle className="w-20 h-20 mb-2" />
+              <h2 className="text-4xl font-black uppercase tracking-widest">{praise}!</h2>
+            </div>
+          )}
+        </div>
+
+        {/* Workspace */}
+        <div className="p-6 md:p-10 space-y-8 flex-grow">
+          {/* Input Area (Drop targets) */}
+          <div className="flex flex-wrap justify-center gap-2 md:gap-3">
+            {userInput.map((val, idx) => (
+              <div 
+                key={`slot-${idx}`}
+                onClick={() => undoInput(idx)}
+                className={`
+                  ${currentQ.type === 'word' ? 'w-10 h-12 md:w-12 md:h-14 text-2xl' : 'px-4 py-2 min-w-[60px] h-12 md:h-14 text-lg'}
+                  flex items-center justify-center rounded-xl border-2 transition-all cursor-pointer
+                  ${val ? 'border-indigo-500 bg-indigo-50 text-indigo-700 shadow-sm' : 'border-dashed border-slate-300 bg-slate-50'}
+                  ${showResult === 'revealed' ? 'border-amber-500 text-amber-700 bg-amber-50' : ''}
+                `}
+              >
+                {val}
+              </div>
+            ))}
+          </div>
+
+          {/* Scrambled Items Area (Selection) */}
+          <div className="flex flex-wrap justify-center gap-2 md:gap-3 pt-4 border-t border-slate-100">
+            {scrambledItems.map((val, idx) => (
+              <button
+                key={`tile-${idx}`}
+                onClick={() => handleTileClick(val, idx)}
+                disabled={showResult === 'correct' || showResult === 'revealed'}
+                className={`
+                  ${currentQ.type === 'word' ? 'w-10 h-12 md:w-12 md:h-14 text-2xl' : 'px-4 py-2 min-w-[60px] h-12 md:h-14 text-lg'}
+                  flex items-center justify-center bg-white border-2 border-slate-200 rounded-xl shadow-sm
+                  hover:border-indigo-400 hover:-translate-y-1 transition-all active:scale-95
+                  disabled:opacity-50 disabled:cursor-not-allowed font-medium
+                `}
+              >
+                {val}
+              </button>
+            ))}
+          </div>
+
+          {/* Feedback Message */}
+          {showResult === 'wrong' && (
+            <div className="flex items-center justify-center gap-2 text-rose-500 font-bold animate-bounce">
+              <XCircle className="w-5 h-5" /> Thử lại nhé! ({attempts}/3)
+            </div>
+          )}
+
+          {showResult === 'revealed' && (
+            <div className="bg-amber-50 p-4 rounded-2xl border border-amber-200 text-amber-800 text-center animate-in slide-in-from-bottom-2">
+              <p className="font-semibold mb-1">Hãy xem đáp án:</p>
+              <p className="text-xl font-bold">{currentQ.answer}</p>
+            </div>
+          )}
+        </div>
+
+        {/* Footer Actions */}
+        <div className="p-6 bg-slate-50 border-t border-slate-100">
+          {!showResult || showResult === 'wrong' ? (
+            <button 
+              onClick={checkAnswer}
+              className="w-full py-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl font-bold text-xl transition-all shadow-lg active:scale-[0.98]"
+            >
+              KIỂM TRA (Enter)
+            </button>
+          ) : (
+            <button 
+              onClick={nextQuestion}
+              className="w-full py-4 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl font-bold text-xl transition-all shadow-lg flex items-center justify-center gap-3 active:scale-[0.98]"
+            >
+              CÂU TIẾP THEO <ArrowRight className="w-6 h-6" />
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Instructions */}
+      <p className="mt-8 text-slate-400 text-sm text-center max-w-sm">
+        Nhấn vào các ô để sắp xếp từ. <br />
+        Trên máy tính: Nhấn <b>Enter</b> để kiểm tra nhanh.
+      </p>
+    </div>
+  );
+};
+
+export default App;
